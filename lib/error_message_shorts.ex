@@ -1,6 +1,6 @@
 defmodule ErrorMessageShorts do
   @moduledoc File.read!("./README.md")
-  alias ErrorMessageShorts.TermBuilder
+  alias ErrorMessageShorts.CommonParams
 
   @type code :: atom()
   @type message :: binary()
@@ -13,9 +13,13 @@ defmodule ErrorMessageShorts do
     details: details()
   }
 
-  @type pattern :: binary() | atom() | Regex.t()
-  @type params :: map() | list()
+  @type params :: map() | keyword()
   @type replacement :: function() | term()
+
+  @type operation :: :=~ | :=== | :< | :> | :<= | :>= | :eq | :lt | :gt | :lte | :gte
+  @type precision :: :microsecond | :millisecond | :second
+
+  @logger_prefix "ErrorMessageShorts"
 
   @app :error_message_shorts
 
@@ -27,14 +31,17 @@ defmodule ErrorMessageShorts do
 
   ### Examples
 
+      iex> ErrorMessageShorts.to_map(%{code: :not_found, message: "no records found", details: %{id: 1}})
+      %{code: :not_found, message: "no records found", details: %{id: 1}}
+
+      iex> ErrorMessageShorts.to_map(%{code: :not_found, message: "no records found"})
+      %{code: :not_found, message: "no records found", details: nil}
+
       iex> ErrorMessageShorts.to_map(:not_found, "no records found", %{id: 1})
-      %{code: :not_found, details: %{id: 1}, message: "no records found"}
+      %{code: :not_found, message: "no records found", details: %{id: 1}}
 
       iex> ErrorMessageShorts.to_map("no records found")
       %{code: :internal_server_error, details: nil, message: "no records found"}
-
-      iex> ErrorMessageShorts.to_map(%{code: :not_found, message: "no records found", details: %{id: 1}})
-      %{code: :not_found, details: %{id: 1}, message: "no records found"}
 
       iex> ErrorMessageShorts.to_map(:invalid_term)
       %{
@@ -52,7 +59,12 @@ defmodule ErrorMessageShorts do
     }
   end
 
-  @spec to_map(term()) :: error_message()
+  @spec to_map(
+    binary() |
+    error_message() |
+    %{optional(any()) => any(), code: code(), message: message()} |
+    term()
+  ) :: error_message()
   def to_map(message) when is_binary(message) do
     to_map(nil, message, nil)
   end
@@ -65,163 +77,81 @@ defmodule ErrorMessageShorts do
     Map.put(error_message, :details, nil)
   end
 
-  def to_map(_term) do
+  def to_map(term) do
+    ErrorMessageShorts.Logger.warn(
+      @logger_prefix,
+      """
+      Did not receive a valid error message, expected one of:
+
+      `binary()`
+      `%{code: atom(), message: binary(), details: nil | map()}`
+      `%{code: atom(), message: binary()}`
+
+      got:
+
+      #{inspect(term, pretty: true)}
+      """
+    )
+
     to_map(@default_message)
   end
 
   @doc """
-  Converts a term to an error message map and replaces the `code`, `message` and
-  details with the `replacement` if a match is found.
+  Changes error message `code`, `message` and `details`.
 
   ### Examples
 
-      iex> ErrorMessageShorts.normalize(
+      iex> ErrorMessageShorts.change(
       ...>   %{
-      ...>     code: :request_timeout,
-      ...>     message: "no records found"
-      ...>   },
-      ...>   %{
-      ...>     code: %{request_timeout: :service_unavailable},
-      ...>     message: %{"no records found" => "oops something is missing"},
-      ...>     details: {%{id: 1}, fn details -> %{input: %{user_id: details.id}} end}
-      ...>   }
-      ...> )
-      %{
-        code: :service_unavailable,
-        message: "oops something is missing",
-        details: nil
-      }
-
-      iex> ErrorMessageShorts.normalize(
-      ...>   %{
-      ...>     code: :request_timeout,
+      ...>     code: :not_found,
       ...>     message: "no records found",
       ...>     details: %{id: 1}
       ...>   },
-      ...>   %{
-      ...>     code: %{request_timeout: :service_unavailable},
-      ...>     message: %{"no records found" => "oops something is missing"},
-      ...>     details: [{%{id: 1}, fn details -> %{input: %{user_id: details.id}} end}]
-      ...>   }
+      ...>   %{code: :not_found},
+      ...>   fn error_message -> %{error_message | code: :service_unavailable} end
       ...> )
-      %{
-        code: :service_unavailable,
-        message: "oops something is missing",
-        details: %{input: %{user_id: 1}}
-      }
-
-      iex> ErrorMessageShorts.normalize(
-      ...>   %{
-      ...>     code: :request_timeout,
-      ...>     message: "no records found",
-      ...>     details: %{id: 1}
-      ...>   },
-      ...>   %{
-      ...>     code: %{request_timeout: :service_unavailable},
-      ...>     message: %{"no records found" => "user %{id} not found"},
-      ...>     details: [{%{id: 1}, fn details -> %{input: %{user_id: details.id}} end}],
-      ...>     replacements: fn %{details: %{input: %{user_id: user_id}}} -> %{"id" => to_string(user_id)} end
-      ...>   }
-      ...> )
-      %{
-        code: :service_unavailable,
-        message: "user 1 not found",
-        details: %{input: %{user_id: 1}}
-      }
-
-      iex> ErrorMessageShorts.normalize(
-      ...>   %{
-      ...>     code: :request_timeout,
-      ...>     message: "no records found",
-      ...>     details: %{id: 1}
-      ...>   },
-      ...>   %{
-      ...>     code: %{request_timeout: :service_unavailable},
-      ...>     message: %{"no records found" => "user %{id} not found"},
-      ...>     details: [{%{id: 1}, fn details -> %{input: %{user_id: details.id}} end}],
-      ...>     replacements: %{"id" => "1"}
-      ...>   }
-      ...> )
-      %{
-        code: :service_unavailable,
-        message: "user 1 not found",
-        details: %{input: %{user_id: 1}}
-      }
-
-      iex> ErrorMessageShorts.normalize(
-      ...>   %{
-      ...>     code: :request_timeout,
-      ...>     message: "no records found",
-      ...>     details: %{id: 1}
-      ...>   },
-      ...>   %{
-      ...>     code: %{request_timeout: :service_unavailable},
-      ...>     message: %{"no records found" => "user not found"},
-      ...>     details: {:*, fn -> %{input: %{user_id: 1}} end}
-      ...>   }
-      ...> )
-      %{
-        code: :service_unavailable,
-        message: "user not found",
-        details: %{input: %{user_id: 1}}
-      }
+      %{code: :service_unavailable, message: "no records found", details: %{id: 1}}
   """
-  @spec normalize(error_message() | term(), params()) :: error_message()
-  def normalize(%{code: code, message: message, details: details} = error_message, params) when is_map(params) do
-    code = TermBuilder.change(code, params[:code] || [])
-    message = TermBuilder.change(message, params[:message] || [])
-    details = apply_changes(params[:details] || [], details)
-
-    error_message =
-      %{
-        error_message |
-        code: code,
-        message: message,
-        details: details
-      }
-
-    apply_replacements(error_message, params[:replacements])
+  @spec change(
+    term() | error_message(),
+    params(),
+    replacement()
+  ) :: error_message()
+  def change(term, params, replacement) do
+    term
+    |> to_map()
+    |> CommonParams.change(params, replacement)
   end
 
-  def normalize(error_message, params) when is_list(params) do
-    Enum.reduce(params, error_message, &normalize(&2, &1))
-  end
+  @doc """
+  Changes error message `code`, `message` and `details`.
 
-  def normalize(term, params) do
-    term |> to_map() |> normalize(params)
-  end
+  ### Examples
 
-  defp apply_replacements(error_message, nil) do
-    error_message
-  end
-
-  defp apply_replacements(error_message, func) when is_function(func, 1) do
-    apply_replacements(error_message, func.(error_message))
-  end
-
-  defp apply_replacements(error_message, func) when is_function(func, 0) do
-    apply_replacements(error_message, func.())
-  end
-
-  defp apply_replacements(%{message: message} = error_message, params) do
-    %{error_message | message: reduce_template_literals(params, message)}
-  end
-
-  defp reduce_template_literals(params, string) do
-    Enum.reduce(params, string, &replace_template_literal/2)
-  end
-
-  defp replace_template_literal({pattern, replacement}, message) do
-    String.replace(message, "%{#{pattern}}", replacement)
-  end
-
-  defp apply_changes(changes, term) do
-    changes
-    |> List.wrap()
-    |> Enum.reduce(term, &reduce_change/2)
-  end
-
-  defp reduce_change({definition, replacement}, acc) do
-    TermBuilder.change(acc, definition, replacement)
+      iex> ErrorMessageShorts.change(
+      ...>   %{
+      ...>     code: :not_found,
+      ...>     message: "no records found",
+      ...>     details: %{id: 1}
+      ...>   },
+      ...>   %{
+      ...>     code: %{not_found: :service_unavailable},
+      ...>     message: %{"no records" => %{=~: "service unavailable, please try again later"}},
+      ...>   }
+      ...> )
+      %{code: :service_unavailable, message: "service unavailable, please try again later", details: %{id: 1}}
+  """
+  @spec change(
+    term() | error_message(),
+    params()
+  ) :: error_message()
+  def change(term, params) do
+    term
+    |> to_map()
+    |> CommonParams.change(
+      code: params[:code] || [],
+      message: params[:message] || [],
+      details: params[:details] || []
+    )
   end
 end
