@@ -148,6 +148,12 @@ defmodule ErrorMessageShorts.CommonParams do
       iex> ErrorMessageShorts.CommonParams.compare?("example", ["example"])
       true
 
+      iex> ErrorMessageShorts.CommonParams.compare?("example", :*)
+      true
+
+      iex> ErrorMessageShorts.CommonParams.compare?(%{post: %{body: "example", likes: 10}}, %{post: :*})
+      true
+
       # succeeds if the right is contained in the left
       iex> ErrorMessageShorts.CommonParams.compare?(%{post: %{body: "example", likes: 10}}, %{post: %{body: "example"}})
       true
@@ -157,6 +163,7 @@ defmodule ErrorMessageShorts.CommonParams do
       false
   """
   @spec compare?(term(), map() | keyword()) :: term()
+  def compare?(_term, :*), do: true
   def compare?(term, params) when is_map(params), do: compare?(term, Map.to_list(params))
   def compare?(term, params), do: traverse_match(term, params)
 
@@ -209,7 +216,11 @@ defmodule ErrorMessageShorts.CommonParams do
   end
 
   defp traverse_match(term, pattern) do
-    compare?(term, :===, pattern)
+    if pattern === :* do
+      true
+    else
+      compare?(term, :===, pattern)
+    end
   end
 
   @doc """
@@ -230,7 +241,7 @@ defmodule ErrorMessageShorts.CommonParams do
   @spec change(term(), params(), replacement()) :: term()
   def change(term, params, replacement) do
     if compare?(term, params) do
-      resolve(replacement, term, params)
+      resolve(replacement, term)
     else
       term
     end
@@ -256,10 +267,6 @@ defmodule ErrorMessageShorts.CommonParams do
 
       # replace a string if it is equal to the key
       iex> ErrorMessageShorts.CommonParams.change("example", %{"example" => fn _existing_value -> "new_value" end})
-      "new_value"
-
-      # replace a string if it is equal to the key
-      iex> ErrorMessageShorts.CommonParams.change("example", %{"example" => fn _existing_value, _pattern -> "new_value" end})
       "new_value"
 
       # replace a string by string comparison
@@ -489,7 +496,7 @@ defmodule ErrorMessageShorts.CommonParams do
 
   defp traverse_change(existing_value, {key, {operation, replacement}}) do
     if compare?(existing_value, operation, key) do
-      resolve(replacement, existing_value, key)
+      resolve(replacement, existing_value)
     else
       existing_value
     end
@@ -497,14 +504,13 @@ defmodule ErrorMessageShorts.CommonParams do
 
   defp traverse_change(existing_value, {key, replacement}) do
     if compare?(existing_value, :===, key) do
-      resolve(replacement, existing_value, key)
+      resolve(replacement, existing_value)
     else
       existing_value
     end
   end
 
-  defp resolve(func, existing_value, pattern) when is_function(func, 2), do: func.(existing_value, pattern)
-  defp resolve(func, existing_value, _pattern) when is_function(func, 1), do: func.(existing_value)
-  defp resolve(func, _existing_value,  _pattern) when is_function(func), do: func.()
-  defp resolve(replacement, _existing_value,  _pattern), do: replacement
+  defp resolve(func, existing_value) when is_function(func, 1), do: func.(existing_value)
+  defp resolve(func, _existing_value) when is_function(func), do: func.()
+  defp resolve(replacement, _existing_value), do: replacement
 end
