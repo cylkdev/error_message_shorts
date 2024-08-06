@@ -151,6 +151,9 @@ defmodule ErrorMessageShorts.CommonParams do
       iex> ErrorMessageShorts.CommonParams.compare?("example", :*)
       true
 
+      iex> ErrorMessageShorts.CommonParams.compare?("example", [:*])
+      true
+
       iex> ErrorMessageShorts.CommonParams.compare?(%{post: %{body: "example", likes: 10}}, %{post: :*})
       true
 
@@ -162,8 +165,7 @@ defmodule ErrorMessageShorts.CommonParams do
       iex> ErrorMessageShorts.CommonParams.compare?(%{post: %{body: "example"}}, %{post: %{body: "example", likes: 10}})
       false
   """
-  @spec compare?(term(), map() | keyword()) :: term()
-  def compare?(_term, :*), do: true
+  @spec compare?(term(), params() | :* | [:*]) :: term()
   def compare?(term, params) when is_map(params), do: compare?(term, Map.to_list(params))
   def compare?(term, params), do: traverse_match(term, params)
 
@@ -228,6 +230,12 @@ defmodule ErrorMessageShorts.CommonParams do
 
   ### Examples
 
+      iex> ErrorMessageShorts.CommonParams.change("example", :*, "new_value")
+      "new_value"
+
+      iex> ErrorMessageShorts.CommonParams.change("example", [:*], "new_value")
+      "new_value"
+
       iex> ErrorMessageShorts.CommonParams.change("example", ["example"], "new_value")
       "new_value"
 
@@ -238,7 +246,7 @@ defmodule ErrorMessageShorts.CommonParams do
       %{message: "example"}
 
   """
-  @spec change(term(), params(), replacement()) :: term()
+  @spec change(term(), params() | :* | [:*], replacement()) :: term()
   def change(term, params, replacement) do
     if compare?(term, params) do
       resolve(replacement, term)
@@ -328,6 +336,10 @@ defmodule ErrorMessageShorts.CommonParams do
       # replace a integer if the key is equal to or greater than the value
       iex> ErrorMessageShorts.CommonParams.change(1_000, %{1_000 => %{gte: 2_000}})
       2_000
+
+      # replace the value of a key in a map by wildcard
+      iex> ErrorMessageShorts.CommonParams.change(%{message: "foo"}, %{message: %{:* => "bar"}})
+      %{message: "bar"}
 
       # replace the value of a key in a map
       iex> ErrorMessageShorts.CommonParams.change(%{message: "foo"}, %{message: %{"foo" => "bar"}})
@@ -503,10 +515,14 @@ defmodule ErrorMessageShorts.CommonParams do
   end
 
   defp traverse_change(existing_value, {key, replacement}) do
-    if compare?(existing_value, :===, key) do
+    if key === :* do
       resolve(replacement, existing_value)
     else
-      existing_value
+      if compare?(existing_value, :===, key) do
+        resolve(replacement, existing_value)
+      else
+        existing_value
+      end
     end
   end
 

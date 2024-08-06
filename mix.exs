@@ -22,7 +22,7 @@ defmodule ErrorMessageShorts.MixProject do
         "coveralls.post": :test
       ],
       dialyzer: [
-        plt_add_apps: [:ex_unit, :mix, :credo],
+        plt_add_apps: [:ex_unit, :mix],
         list_unused_filters: true,
         plt_local_path: "dialyzer",
         plt_core_path: "dialyzer",
@@ -41,7 +41,7 @@ defmodule ErrorMessageShorts.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_doc, "~> 0.1"},
+      {:ex_doc, "~> 0.1 or ~> 0.2", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.6", only: :test, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
