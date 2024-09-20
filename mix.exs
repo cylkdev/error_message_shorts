@@ -1,14 +1,17 @@
 defmodule ErrorMessageShorts.MixProject do
   use Mix.Project
 
+  @source_url "https://github.com/cylkdev/error_message_shorts"
+  @version "0.1.0"
+
   def project do
     [
       app: :error_message_shorts,
-      version: "0.1.0",
-      elixir: "~> 1.14",
+      version: @version,
+      elixir: "~> 1.0",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Normalize error messages across your system",
+      description: "Declarative comparisons and changes",
       docs: docs(),
       package: package(),
       test_coverage: [tool: ExCoveralls],
@@ -22,7 +25,11 @@ defmodule ErrorMessageShorts.MixProject do
         "coveralls.post": :test
       ],
       dialyzer: [
-        plt_add_apps: [:ex_unit, :mix],
+        plt_add_apps: [
+          :ex_unit,
+          :decimal,
+          :mix
+        ],
         list_unused_filters: true,
         plt_local_path: "dialyzer",
         plt_core_path: "dialyzer",
@@ -41,9 +48,11 @@ defmodule ErrorMessageShorts.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_doc, "~> 0.1 or ~> 0.2", only: :dev, runtime: false},
-      {:excoveralls, "~> 0.14.6", only: :test, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:ex_doc, "~> 0.1", runtime: false},
+      {:excoveralls, "~> 0.14.0", runtime: false},
+      {:dialyxir, "~> 1.0", runtime: false},
+      {:credo, "~> 1.0", runtime: false},
+      {:substitute_x, git: "https://github.com/cylkdev/substitute_x.git", branch: "main"}
     ]
   end
 
@@ -58,8 +67,17 @@ defmodule ErrorMessageShorts.MixProject do
 
   defp docs do
     [
-      main: "ErrorMessageShorts",
-      source_url: "https://github.com/cylkdev/error_message_shorts"
+      main: "readme",
+      source_url: "https://github.com/cylkdev/error_message_shorts",
+      extras: [
+        "CHANGELOG.md": [],
+        "LICENSE.txt": [title: "License"],
+        "README.md": [title: "Readme"]
+      ],
+      source_url: @source_url,
+      source_ref: @version,
+      api_reference: false,
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]
   end
 end
